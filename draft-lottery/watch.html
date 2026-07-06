@@ -1,1 +1,133 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Draft Lottery</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#0f1115; color:#e8e8e8; padding:2rem 1rem 4rem; }
+  .container { max-width:720px; margin:0 auto; }
+  h1 { text-align:center; font-size:22px; font-weight:600; margin:0 0 0.25rem; }
+  .subtitle { text-align:center; color:#8a8f98; font-size:14px; margin-bottom:2rem; }
+  .stage { display:flex; align-items:center; justify-content:center; gap:2rem; margin-bottom:2rem; min-height:90px; }
+  .slot { width:220px; height:70px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:600; text-align:center; padding:0 12px; border:1px solid #2a2d34; }
+  .slot.a { background:#1d2430; color:#85b7eb; }
+  .slot.b { background:#1d2b26; color:#5dcaa5; }
+  .slot.reveal { animation: pop 0.4s ease; }
+  @keyframes pop { 0% { transform:scale(0.9); opacity:0; } 100% { transform:scale(1); opacity:1; } }
+  .arrow { font-size:22px; color:#5f6570; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { padding:10px 14px; text-align:left; border-bottom:1px solid #23262d; }
+  th { color:#8a8f98; font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:0.5px; }
+  td.team-a { color:#85b7eb; font-weight:600; }
+  td.team-b { color:#5dcaa5; font-weight:600; }
+  tr.new-row td { animation: flash 1s ease; }
+  @keyframes flash { 0% { background:#2a3d34; } 100% { background:transparent; } }
+  .leftover { margin-top:2rem; padding:1rem 1.25rem; border-radius:10px; background:#1d1f26; border:1px solid #2a2d34; }
+  .leftover h3 { margin:0 0 8px; font-size:13px; color:#8a8f98; text-transform:uppercase; letter-spacing:0.5px; font-weight:500; }
+  .leftover-teams { display:flex; gap:8px; flex-wrap:wrap; }
+  .leftover-teams span { background:#2a1d1f; color:#f09595; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:600; }
+  .hidden { display:none; }
+  .waiting { text-align:center; color:#8a8f98; padding:3rem 0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1 id="drawTitle">Draft Lottery</h1>
+  <div class="subtitle" id="subtitle">Warte auf Ziehung...</div>
 
+  <div class="stage hidden" id="stage">
+    <div class="slot a" id="currentA">–</div>
+    <div class="arrow">→</div>
+    <div class="slot b" id="currentB">–</div>
+  </div>
+
+  <table>
+    <thead><tr><th>Pool A</th><th>Pool B</th></tr></thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+
+  <div class="leftover hidden" id="leftoverBox">
+    <h3>Nicht gezogen</h3>
+    <div class="leftover-teams" id="leftoverTeams"></div>
+  </div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+  const SUPABASE_URL = 'https://taqpqknorxxekuqhrcxm.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_iHtHaaxxy_JCJkFpuwgUFQ_ppZH6Xca';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const params = new URLSearchParams(location.search);
+  const drawId = params.get('draw');
+  const subtitle = document.getElementById('subtitle');
+
+  if (!drawId) {
+    subtitle.textContent = 'Kein Draw angegeben (?draw=ID in der URL).';
+  } else {
+    loadDraw();
+    supabase
+      .channel('draw-' + drawId)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'draws', filter: `id=eq.${drawId}`
+      }, (payload) => {
+        render(payload.new);
+      })
+      .subscribe();
+  }
+
+  async function loadDraw() {
+    const { data, error } = await supabase.from('draws').select('*').eq('id', drawId).single();
+    if (error) { subtitle.textContent = 'Fehler: ' + error.message; return; }
+    render(data);
+  }
+
+  let lastCount = -1;
+
+  function render(draw) {
+    document.getElementById('drawTitle').textContent = draw.name;
+    const results = draw.state.results || [];
+    const remaining = draw.state.remaining_b || [];
+    const totalA = draw.config.pool_a.length;
+
+    subtitle.textContent = draw.status === 'done'
+      ? 'Ziehung abgeschlossen'
+      : `${results.length} / ${totalA} gezogen`;
+
+    const tbody = document.getElementById('resultsBody');
+    tbody.innerHTML = results.map((r, i) =>
+      `<tr class="${i === results.length - 1 && results.length > lastCount ? 'new-row' : ''}">
+        <td class="team-a">${r.a}</td><td class="team-b">${r.b}</td>
+      </tr>`
+    ).join('');
+
+    if (results.length > 0) {
+      const stage = document.getElementById('stage');
+      stage.classList.remove('hidden');
+      const last = results[results.length - 1];
+      const currentA = document.getElementById('currentA');
+      const currentB = document.getElementById('currentB');
+      currentA.textContent = last.a;
+      currentB.textContent = last.b;
+      if (results.length > lastCount) {
+        currentA.classList.remove('reveal'); void currentA.offsetWidth; currentA.classList.add('reveal');
+        currentB.classList.remove('reveal'); void currentB.offsetWidth; currentB.classList.add('reveal');
+      }
+    }
+
+    lastCount = results.length;
+
+    const leftoverBox = document.getElementById('leftoverBox');
+    if (draw.status === 'done') {
+      leftoverBox.classList.remove('hidden');
+      document.getElementById('leftoverTeams').innerHTML =
+        remaining.map(t => `<span>${t}</span>`).join('');
+    } else {
+      leftoverBox.classList.add('hidden');
+    }
+  }
+</script>
+</body>
+</html>
