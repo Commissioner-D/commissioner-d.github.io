@@ -265,7 +265,7 @@
           row.innerHTML = `<td class="team-a">${clean(last.a)}</td><td class="team-b">${clean(last.b)}</td>`;
           tbody.appendChild(row);
           renderRemaining(draw, results);
-        });
+        }, false, bDuration);
       } else {
         currentA.textContent = clean(last.a);
         currentB.textContent = clean(last.b);
