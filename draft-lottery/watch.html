@@ -13,6 +13,8 @@
   .slot { width:220px; height:70px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:600; text-align:center; padding:0 12px; border:1px solid #2a2d34; }
   .slot.a { background:#1d2430; color:#85b7eb; }
   .slot.b { background:#1d2b26; color:#5dcaa5; }
+  .slot.b.spinning { animation: pulse 0.08s infinite; }
+  @keyframes pulse { 0% { transform:scale(1); } 50% { transform:scale(1.03); } 100% { transform:scale(1); } }
   .slot.reveal { animation: pop 0.4s ease; }
   @keyframes pop { 0% { transform:scale(0.9); opacity:0; } 100% { transform:scale(1); opacity:1; } }
   .arrow { font-size:22px; color:#5f6570; }
@@ -34,6 +36,9 @@
 <body>
 <div class="container">
   <h1 id="drawTitle">Draft Lottery</h1>
+  <div style="text-align:center;margin-bottom:0.75rem;">
+    <button id="soundBtn" style="background:#2a2d34;color:#e8e8e8;border:none;padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;">🔇 Ton aktivieren</button>
+  </div>
   <div class="subtitle" id="subtitle">Warte auf Ziehung...</div>
   <div class="subtitle hidden" id="countdown" style="font-size:28px;font-weight:700;color:#e8e8e8;"></div>
 
@@ -85,6 +90,46 @@
     render(data);
   }
 
+  let soundEnabled = false;
+  let audioCtx = null;
+
+  document.getElementById('soundBtn').addEventListener('click', () => {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume();
+    soundEnabled = !soundEnabled;
+    document.getElementById('soundBtn').textContent = soundEnabled ? '🔊 Ton an' : '🔇 Ton aktivieren';
+  });
+
+  function playTick() {
+    if (!soundEnabled || !audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 440;
+    gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.05);
+  }
+
+  function playLanding() {
+    if (!soundEnabled || !audioCtx) return;
+    const now = audioCtx.currentTime;
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + i * 0.08 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 0.5);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.5);
+    });
+  }
+
   let lastCount = -1;
   let currentDrawData = null;
   let countdownTimer = null;
@@ -112,6 +157,26 @@
       subtitleEl.textContent = 'Ziehung startet in:';
       countdownEl.textContent = `${h > 0 ? h + ':' : ''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     }, 250);
+  }
+
+  function spinAndReveal(el, finalValue, pool) {
+    const duration = 2000;
+    const tickEvery = 80;
+    let elapsed = 0;
+    el.classList.add('spinning');
+    const interval = setInterval(() => {
+      const randomPick = pool[Math.floor(Math.random() * pool.length)];
+      el.textContent = randomPick;
+      playTick();
+      elapsed += tickEvery;
+      if (elapsed >= duration) {
+        clearInterval(interval);
+        el.textContent = finalValue;
+        el.classList.remove('spinning');
+        el.classList.remove('reveal'); void el.offsetWidth; el.classList.add('reveal');
+        playLanding();
+      }
+    }, tickEvery);
   }
 
   function render(draw) {
@@ -146,11 +211,13 @@
       const last = results[results.length - 1];
       const currentA = document.getElementById('currentA');
       const currentB = document.getElementById('currentB');
-      currentA.textContent = last.a;
-      currentB.textContent = last.b;
+
       if (results.length > lastCount) {
-        currentA.classList.remove('reveal'); void currentA.offsetWidth; currentA.classList.add('reveal');
-        currentB.classList.remove('reveal'); void currentB.offsetWidth; currentB.classList.add('reveal');
+        currentA.textContent = last.a;
+        spinAndReveal(currentB, last.b, draw.config.pool_b);
+      } else {
+        currentA.textContent = last.a;
+        currentB.textContent = last.b;
       }
     }
 
