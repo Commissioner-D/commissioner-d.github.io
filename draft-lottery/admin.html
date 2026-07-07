@@ -99,6 +99,10 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_iHtHaaxxy_JCJkFpuwgUFQ_ppZH6Xca';
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+  function clean(s) {
+    return typeof s === 'string' ? s.replace(/^"+|"+$/g, '') : s;
+  }
+
   const loginBox = document.getElementById('loginBox');
   const dashboard = document.getElementById('dashboard');
   const loginStatus = document.getElementById('loginStatus');
@@ -247,7 +251,7 @@
 
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = currentDraw.state.results.map(r =>
-      `<tr><td>${r.a}</td><td>${r.b}</td></tr>`
+      `<tr><td>${clean(r.a)}</td><td>${clean(r.b)}</td></tr>`
     ).join('');
 
     const done = currentDraw.state.next_index >= currentDraw.config.pool_a.length;
@@ -257,7 +261,7 @@
 
     const leftoverInfo = document.getElementById('leftoverInfo');
     leftoverInfo.textContent = done
-      ? 'Übrig: ' + currentDraw.state.remaining_b.join(', ')
+      ? 'Übrig: ' + currentDraw.state.remaining_b.map(clean).join(', ')
       : '';
   }
 
