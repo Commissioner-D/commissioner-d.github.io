@@ -57,6 +57,16 @@
           <textarea id="poolB" placeholder="Team A&#10;Team B&#10;..."></textarea>
         </div>
       </div>
+      <div class="row">
+        <div>
+          <label>Start (österreichische Zeit)</label>
+          <input type="datetime-local" id="scheduledAt">
+        </div>
+        <div>
+          <label>Intervall pro Ziehung (Sekunden)</label>
+          <input type="number" id="pickInterval" value="10" min="1">
+        </div>
+      </div>
       <button id="createBtn">Ziehung erstellen</button>
       <div class="status-msg" id="createStatus"></div>
     </div>
@@ -117,6 +127,31 @@
     }
   });
 
+  // Interpretiert einen datetime-local Wert als Europe/Vienna Zeit und gibt UTC ISO zurück
+  function viennaLocalToUTCISO(localValue) {
+    if (!localValue) return null;
+    const asUTCGuess = new Date(localValue + ':00Z');
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Vienna', hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    const parts = dtf.formatToParts(asUTCGuess).reduce((acc, p) => {
+      if (p.type !== 'literal') acc[p.type] = p.value;
+      return acc;
+    }, {});
+    const viennaAsIfUTC = Date.UTC(
+      parts.year, parts.month - 1, parts.day, parts.hour === '24' ? 0 : parts.hour, parts.minute, parts.second
+    );
+    const diff = asUTCGuess.getTime() - viennaAsIfUTC;
+    return new Date(asUTCGuess.getTime() + diff).toISOString();
+  }
+
+  function utcToViennaDisplay(utcISO) {
+    if (!utcISO) return null;
+    return new Date(utcISO).toLocaleString('de-AT', { timeZone: 'Europe/Vienna', dateStyle: 'medium', timeStyle: 'short' });
+  }
+
   document.getElementById('createBtn').addEventListener('click', async () => {
     const name = document.getElementById('drawName').value.trim();
     const poolA = document.getElementById('poolA').value.split('\n').map(s => s.trim()).filter(Boolean);
@@ -134,19 +169,26 @@
 
     const config = { type: 'pool_match', pool_a: poolA, pool_b: poolB };
     const state = { results: [], remaining_b: [...poolB], next_index: 0 };
+    const scheduledLocal = document.getElementById('scheduledAt').value;
+    const scheduledAt = viennaLocalToUTCISO(scheduledLocal);
+    const pickInterval = parseInt(document.getElementById('pickInterval').value, 10) || 10;
 
-    const { data, error } = await supabase.from('draws').insert({
-      name, config, state, status: 'pending'
-    }).select().single();
+    const insertPayload = { name, config, state, status: 'pending', pick_interval_seconds: pickInterval };
+    if (scheduledAt) insertPayload.scheduled_at = scheduledAt;
+
+    const { data, error } = await supabase.from('draws').insert(insertPayload).select().single();
 
     if (error) {
       createStatus.textContent = 'Fehler: ' + error.message;
       return;
     }
-    createStatus.textContent = 'Erstellt.';
+    createStatus.textContent = scheduledAt
+      ? `Erstellt. Start: ${utcToViennaDisplay(scheduledAt)} (Wien)`
+      : 'Erstellt.';
     document.getElementById('drawName').value = '';
     document.getElementById('poolA').value = '';
     document.getElementById('poolB').value = '';
+    document.getElementById('scheduledAt').value = '';
     loadDraws();
     openDraw(data.id);
   });
@@ -178,7 +220,9 @@
   function renderActiveDraw() {
     document.getElementById('activeDrawName').textContent = currentDraw.name;
     const watchUrl = `${location.origin}${location.pathname.replace('admin.html','watch.html')}?draw=${currentDraw.id}`;
-    document.getElementById('watchLink').textContent = watchUrl;
+    document.getElementById('watchLink').textContent = watchUrl
+      + (currentDraw.scheduled_at ? `  ·  Start: ${utcToViennaDisplay(currentDraw.scheduled_at)} (Wien)` : '')
+      + `  ·  Intervall: ${currentDraw.pick_interval_seconds || 10}s`;
 
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = currentDraw.state.results.map(r =>
