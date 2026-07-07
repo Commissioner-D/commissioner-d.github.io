@@ -199,10 +199,29 @@
     if (error) { listEl.textContent = 'Fehler: ' + error.message; return; }
     if (!data.length) { listEl.textContent = 'Noch keine Ziehungen.'; return; }
     listEl.innerHTML = data.map(d =>
-      `<div class="draw-list-item"><a data-id="${d.id}">${d.name}</a><span style="color:#8a8f98;">${d.status}</span></div>`
+      `<div class="draw-list-item">
+        <a data-id="${d.id}">${d.name}</a>
+        <span style="display:flex;align-items:center;gap:10px;">
+          <span style="color:#8a8f98;">${d.status}</span>
+          <button class="secondary delete-btn" data-id="${d.id}" style="margin:0;padding:4px 10px;font-size:12px;">Löschen</button>
+        </span>
+      </div>`
     ).join('');
     listEl.querySelectorAll('a').forEach(a => {
       a.addEventListener('click', () => openDraw(a.dataset.id));
+    });
+    listEl.querySelectorAll('.delete-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Diese Ziehung wirklich unwiderruflich löschen?')) return;
+        const { error } = await supabase.from('draws').delete().eq('id', btn.dataset.id);
+        if (error) { alert('Fehler: ' + error.message); return; }
+        if (currentDraw && currentDraw.id === btn.dataset.id) {
+          currentDraw = null;
+          document.getElementById('activeDraw').classList.add('hidden');
+        }
+        loadDraws();
+      });
     });
   }
 
@@ -220,9 +239,11 @@
   function renderActiveDraw() {
     document.getElementById('activeDrawName').textContent = currentDraw.name;
     const watchUrl = `${location.origin}${location.pathname.replace('admin.html','watch.html')}?draw=${currentDraw.id}`;
-    document.getElementById('watchLink').textContent = watchUrl
-      + (currentDraw.scheduled_at ? `  ·  Start: ${utcToViennaDisplay(currentDraw.scheduled_at)} (Wien)` : '')
-      + `  ·  Intervall: ${currentDraw.pick_interval_seconds || 10}s`;
+    const watchLinkEl = document.getElementById('watchLink');
+    watchLinkEl.innerHTML = `<a href="${watchUrl}" target="_blank" style="color:#5dcaa5;">${watchUrl}</a>`
+      + `<div style="color:#8a8f98;margin-top:4px;">`
+      + (currentDraw.scheduled_at ? `Start: ${utcToViennaDisplay(currentDraw.scheduled_at)} (Wien) · ` : '')
+      + `Intervall: ${currentDraw.pick_interval_seconds || 10}s</div>`;
 
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = currentDraw.state.results.map(r =>
