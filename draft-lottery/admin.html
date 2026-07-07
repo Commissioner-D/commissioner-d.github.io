@@ -68,4 +68,176 @@
 
     <div id="activeDraw" class="card hidden">
       <h2 style="font-size:15px;margin:0 0 0.5rem;" id="activeDrawName"></h2>
-      <div class="draw-link"
+      <div class="draw-link" id="watchLink"></div>
+      <div class="row" style="margin-top:1rem;">
+        <button id="drawNextBtn">Nächste Ziehung</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+      </div>
+      <table>
+        <thead><tr><th>Pool A</th><th>Pool B</th></tr></thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+      <div id="leftoverInfo" class="status-msg"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+  const SUPABASE_URL = 'https://taqpqknorxxekuqhrcxm.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_iHtHaaxxy_JCJkFpuwgUFQ_ppZH6Xca';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const loginBox = document.getElementById('loginBox');
+  const dashboard = document.getElementById('dashboard');
+  const loginStatus = document.getElementById('loginStatus');
+
+  document.getElementById('loginBtn').addEventListener('click', async () => {
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    loginStatus.textContent = 'Logging in...';
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      loginStatus.textContent = 'Fehler: ' + error.message;
+      return;
+    }
+    loginStatus.textContent = '';
+    loginBox.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    loadDraws();
+  });
+
+  // restore session on reload
+  supabase.auth.getSession().then(({ data }) => {
+    if (data.session) {
+      loginBox.classList.add('hidden');
+      dashboard.classList.remove('hidden');
+      loadDraws();
+    }
+  });
+
+  document.getElementById('createBtn').addEventListener('click', async () => {
+    const name = document.getElementById('drawName').value.trim();
+    const poolA = document.getElementById('poolA').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const poolB = document.getElementById('poolB').value.split('\n').map(s => s.trim()).filter(Boolean);
+    const createStatus = document.getElementById('createStatus');
+
+    if (!name || poolA.length === 0 || poolB.length === 0) {
+      createStatus.textContent = 'Name, Pool A und Pool B ausfüllen.';
+      return;
+    }
+    if (poolA.length > poolB.length) {
+      createStatus.textContent = 'Pool A darf nicht größer sein als Pool B.';
+      return;
+    }
+
+    const config = { type: 'pool_match', pool_a: poolA, pool_b: poolB };
+    const state = { results: [], remaining_b: [...poolB], next_index: 0 };
+
+    const { data, error } = await supabase.from('draws').insert({
+      name, config, state, status: 'pending'
+    }).select().single();
+
+    if (error) {
+      createStatus.textContent = 'Fehler: ' + error.message;
+      return;
+    }
+    createStatus.textContent = 'Erstellt.';
+    document.getElementById('drawName').value = '';
+    document.getElementById('poolA').value = '';
+    document.getElementById('poolB').value = '';
+    loadDraws();
+    openDraw(data.id);
+  });
+
+  async function loadDraws() {
+    const { data, error } = await supabase.from('draws').select('*').order('created_at', { ascending: false });
+    const listEl = document.getElementById('drawList');
+    if (error) { listEl.textContent = 'Fehler: ' + error.message; return; }
+    if (!data.length) { listEl.textContent = 'Noch keine Ziehungen.'; return; }
+    listEl.innerHTML = data.map(d =>
+      `<div class="draw-list-item"><a data-id="${d.id}">${d.name}</a><span style="color:#8a8f98;">${d.status}</span></div>`
+    ).join('');
+    listEl.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => openDraw(a.dataset.id));
+    });
+  }
+
+  let currentDraw = null;
+
+  async function openDraw(id) {
+    const { data, error } = await supabase.from('draws').select('*').eq('id', id).single();
+    if (error) { alert(error.message); return; }
+    currentDraw = data;
+    renderActiveDraw();
+    document.getElementById('activeDraw').classList.remove('hidden');
+    document.getElementById('activeDraw').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function renderActiveDraw() {
+    document.getElementById('activeDrawName').textContent = currentDraw.name;
+    const watchUrl = `${location.origin}${location.pathname.replace('admin.html','watch.html')}?draw=${currentDraw.id}`;
+    document.getElementById('watchLink').textContent = watchUrl;
+
+    const tbody = document.getElementById('resultsBody');
+    tbody.innerHTML = currentDraw.state.results.map(r =>
+      `<tr><td>${r.a}</td><td>${r.b}</td></tr>`
+    ).join('');
+
+    const done = currentDraw.state.next_index >= currentDraw.config.pool_a.length;
+    const drawNextBtn = document.getElementById('drawNextBtn');
+    drawNextBtn.disabled = done;
+    drawNextBtn.textContent = done ? 'Fertig' : 'Nächste Ziehung';
+
+    const leftoverInfo = document.getElementById('leftoverInfo');
+    leftoverInfo.textContent = done
+      ? 'Übrig: ' + currentDraw.state.remaining_b.join(', ')
+      : '';
+  }
+
+  document.getElementById('drawNextBtn').addEventListener('click', async () => {
+    if (!currentDraw) return;
+    const state = currentDraw.state;
+    const config = currentDraw.config;
+    if (state.next_index >= config.pool_a.length) return;
+
+    const teamA = config.pool_a[state.next_index];
+    const idx = Math.floor(Math.random() * state.remaining_b.length);
+    const teamB = state.remaining_b[idx];
+    const newRemaining = [...state.remaining_b];
+    newRemaining.splice(idx, 1);
+
+    const newState = {
+      results: [...state.results, { a: teamA, b: teamB }],
+      remaining_b: newRemaining,
+      next_index: state.next_index + 1
+    };
+    const newStatus = newState.next_index >= config.pool_a.length ? 'done' : 'live';
+
+    const { data, error } = await supabase.from('draws')
+      .update({ state: newState, status: newStatus })
+      .eq('id', currentDraw.id)
+      .select().single();
+
+    if (error) { alert(error.message); return; }
+    currentDraw = data;
+    renderActiveDraw();
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', async () => {
+    if (!currentDraw) return;
+    if (!confirm('Ziehung wirklich zurücksetzen?')) return;
+    const config = currentDraw.config;
+    const newState = { results: [], remaining_b: [...config.pool_b], next_index: 0 };
+    const { data, error } = await supabase.from('draws')
+      .update({ state: newState, status: 'pending' })
+      .eq('id', currentDraw.id)
+      .select().single();
+    if (error) { alert(error.message); return; }
+    currentDraw = data;
+    renderActiveDraw();
+  });
+</script>
+</body>
+</html>
