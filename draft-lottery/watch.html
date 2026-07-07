@@ -35,6 +35,7 @@
 <div class="container">
   <h1 id="drawTitle">Draft Lottery</h1>
   <div class="subtitle" id="subtitle">Warte auf Ziehung...</div>
+  <div class="subtitle hidden" id="countdown" style="font-size:28px;font-weight:700;color:#e8e8e8;"></div>
 
   <div class="stage hidden" id="stage">
     <div class="slot a" id="currentA">–</div>
@@ -85,8 +86,36 @@
   }
 
   let lastCount = -1;
+  let currentDrawData = null;
+  let countdownTimer = null;
+
+  function startCountdown() {
+    if (countdownTimer) clearInterval(countdownTimer);
+    const countdownEl = document.getElementById('countdown');
+    const subtitleEl = document.getElementById('subtitle');
+
+    countdownTimer = setInterval(() => {
+      if (!currentDrawData || currentDrawData.status !== 'pending' || !currentDrawData.scheduled_at) {
+        countdownEl.classList.add('hidden');
+        clearInterval(countdownTimer);
+        return;
+      }
+      const diff = new Date(currentDrawData.scheduled_at).getTime() - Date.now();
+      if (diff <= 0) {
+        countdownEl.textContent = 'Start...';
+        return;
+      }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      countdownEl.classList.remove('hidden');
+      subtitleEl.textContent = 'Ziehung startet in:';
+      countdownEl.textContent = `${h > 0 ? h + ':' : ''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }, 250);
+  }
 
   function render(draw) {
+    currentDrawData = draw;
     document.getElementById('drawTitle').textContent = draw.name;
     const results = draw.state.results || [];
     const remaining = draw.state.remaining_b || [];
@@ -94,7 +123,15 @@
 
     subtitle.textContent = draw.status === 'done'
       ? 'Ziehung abgeschlossen'
-      : `${results.length} / ${totalA} gezogen`;
+      : draw.status === 'live'
+        ? `${results.length} / ${totalA} gezogen`
+        : (draw.scheduled_at ? 'Ziehung startet in:' : 'Warte auf Ziehung...');
+
+    if (draw.status === 'pending' && draw.scheduled_at) {
+      startCountdown();
+    } else {
+      document.getElementById('countdown').classList.add('hidden');
+    }
 
     const tbody = document.getElementById('resultsBody');
     tbody.innerHTML = results.map((r, i) =>
