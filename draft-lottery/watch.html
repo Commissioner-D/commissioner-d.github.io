@@ -12,6 +12,7 @@
   .stage { display:flex; align-items:center; justify-content:center; gap:2rem; margin-bottom:2rem; min-height:90px; }
   .slot { width:220px; height:70px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:600; text-align:center; padding:0 12px; border:1px solid #2a2d34; }
   .slot.a { background:#1d2430; color:#85b7eb; }
+  .slot.a.spinning { animation: pulse 0.08s infinite; }
   .slot.b { background:#1d2b26; color:#5dcaa5; }
   .slot.b.spinning { animation: pulse 0.08s infinite; }
   @keyframes pulse { 0% { transform:scale(1); } 50% { transform:scale(1.03); } 100% { transform:scale(1); } }
@@ -159,7 +160,7 @@
     }, 250);
   }
 
-  function spinAndReveal(el, finalValue, pool) {
+  function spinAndReveal(el, finalValue, pool, onDone, silent) {
     const duration = 2000;
     const tickEvery = 80;
     let elapsed = 0;
@@ -167,14 +168,15 @@
     const interval = setInterval(() => {
       const randomPick = pool[Math.floor(Math.random() * pool.length)];
       el.textContent = randomPick;
-      playTick();
+      if (!silent) playTick();
       elapsed += tickEvery;
       if (elapsed >= duration) {
         clearInterval(interval);
         el.textContent = finalValue;
         el.classList.remove('spinning');
         el.classList.remove('reveal'); void el.offsetWidth; el.classList.add('reveal');
-        playLanding();
+        if (!silent) playLanding();
+        if (onDone) onDone();
       }
     }, tickEvery);
   }
@@ -199,10 +201,11 @@
     }
 
     const tbody = document.getElementById('resultsBody');
-    tbody.innerHTML = results.map((r, i) =>
-      `<tr class="${i === results.length - 1 && results.length > lastCount ? 'new-row' : ''}">
-        <td class="team-a">${r.a}</td><td class="team-b">${r.b}</td>
-      </tr>`
+    const isNewReveal = results.length > lastCount;
+    const visibleResults = isNewReveal ? results.slice(0, -1) : results;
+
+    tbody.innerHTML = visibleResults.map(r =>
+      `<tr><td class="team-a">${r.a}</td><td class="team-b">${r.b}</td></tr>`
     ).join('');
 
     if (results.length > 0) {
@@ -212,9 +215,14 @@
       const currentA = document.getElementById('currentA');
       const currentB = document.getElementById('currentB');
 
-      if (results.length > lastCount) {
-        currentA.textContent = last.a;
-        spinAndReveal(currentB, last.b, draw.config.pool_b);
+      if (isNewReveal) {
+        spinAndReveal(currentA, last.a, draw.config.pool_a, null, true);
+        spinAndReveal(currentB, last.b, draw.config.pool_b, () => {
+          const row = document.createElement('tr');
+          row.className = 'new-row';
+          row.innerHTML = `<td class="team-a">${last.a}</td><td class="team-b">${last.b}</td>`;
+          tbody.appendChild(row);
+        });
       } else {
         currentA.textContent = last.a;
         currentB.textContent = last.b;
