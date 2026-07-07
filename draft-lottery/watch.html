@@ -31,8 +31,9 @@
   @keyframes flash { 0% { background:#2a3d34; } 100% { background:transparent; } }
   .leftover { margin-top:2rem; padding:1rem 1.25rem; border-radius:10px; background:#1d1f26; border:1px solid #2a2d34; }
   .leftover h3 { margin:0 0 8px; font-size:13px; color:#8a8f98; text-transform:uppercase; letter-spacing:0.5px; font-weight:500; }
-  .leftover-teams { display:flex; gap:8px; flex-wrap:wrap; }
-  .leftover-teams span { background:#2a1d1f; color:#f09595; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:600; }
+  .leftover-pill { padding:4px 12px; border-radius:20px; font-size:13px; font-weight:600; }
+  .leftover-pill.a { background:#16233a; color:#8fc3ef; }
+  .leftover-pill.b { background:#123a2c; color:#7fe0b8; }
   .hidden { display:none; }
   .waiting { text-align:center; color:#8a8f98; padding:3rem 0; }
 </style>
@@ -43,9 +44,9 @@
     <img src="data:image/png;base64,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" alt="FIFA World Cup" style="height:48px;position:absolute;right:0;top:50%;transform:translateY(-50%);">
   </div><div class="subtitle info-box" style="max-width:600px;margin:0 auto 1.5rem;line-height:1.5;background:#1a1d24;border:1px solid #2a2d34;border-radius:10px;padding:14px 18px;text-align:left;">Teams without a self-selected draft spot enter this lottery and are randomly assigned one of the remaining FIFA World Cup nations. The draft order is then filled from the back forward: the nation eliminated first fills the last available pick, while the nation that stays in the tournament the longest gets the earliest available pick. If two lottery nations are eliminated in the same round, the exact time of elimination decides the order. If two lottery nations meet in the final, the winner gets the earlier pick.</div>
   <div style="text-align:center;margin-bottom:0.75rem;">
-    <button id="soundBtn" style="background:#2a2d34;color:#e8e8e8;border:none;padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;">🔇 Ton aktivieren</button>
+    <button id="soundBtn" style="background:#2a2d34;color:#e8e8e8;border:none;padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;">Enable sound</button>
   </div>
-  <div class="subtitle" id="subtitle">Warte auf Ziehung...</div>
+  <div class="subtitle" id="subtitle">Waiting for draw...</div>
   <div class="subtitle hidden" id="countdown" style="font-size:28px;font-weight:700;color:#14161a;"></div>
 
   <div class="stage hidden" id="stage">
@@ -59,9 +60,12 @@
     <tbody id="resultsBody"></tbody>
   </table>
 
-  <div class="leftover hidden" id="leftoverBox">
-    <h3>Nicht gezogen</h3>
-    <div class="leftover-teams" id="leftoverTeams"></div>
+  <div class="leftover" id="leftoverBox">
+    <h3>Remaining</h3>
+    <div style="display:flex;justify-content:center;gap:70px;">
+      <div id="leftoverA" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;"></div>
+      <div id="leftoverB" style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;"></div>
+    </div>
   </div>
 </div>
 
@@ -77,7 +81,7 @@
   const subtitle = document.getElementById('subtitle');
 
   if (!drawId) {
-    subtitle.textContent = 'Kein Draw angegeben (?draw=ID in der URL).';
+    subtitle.textContent = 'No draw specified (?draw=ID in the URL).';
   } else {
     loadDraw();
     supabase
@@ -92,7 +96,7 @@
 
   async function loadDraw() {
     const { data, error } = await supabase.from('draws').select('*').eq('id', drawId).single();
-    if (error) { subtitle.textContent = 'Fehler: ' + error.message; return; }
+    if (error) { subtitle.textContent = 'Error: ' + error.message; return; }
     render(data);
   }
 
@@ -103,7 +107,7 @@
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     audioCtx.resume();
     soundEnabled = !soundEnabled;
-    document.getElementById('soundBtn').textContent = soundEnabled ? '🔊 Ton an' : '🔇 Ton aktivieren';
+    document.getElementById('soundBtn').textContent = soundEnabled ? 'Sound on' : 'Enable sound';
   });
 
   function playTick() {
@@ -153,20 +157,20 @@
       }
       const diff = new Date(currentDrawData.scheduled_at).getTime() - Date.now();
       if (diff <= 0) {
-        countdownEl.textContent = 'Start...';
+        countdownEl.textContent = 'Starting...';
         return;
       }
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
       countdownEl.classList.remove('hidden');
-      subtitleEl.textContent = 'Ziehung startet in:';
+      subtitleEl.textContent = 'Draw starts in:';
       countdownEl.textContent = `${h > 0 ? h + ':' : ''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     }, 250);
   }
 
-  function spinAndReveal(el, finalValue, pool, onDone, silent) {
-    const duration = 2000;
+  function spinAndReveal(el, finalValue, pool, onDone, silent, duration) {
+    duration = duration || 2000;
     const tickEvery = 80;
     let elapsed = 0;
     el.classList.add('spinning');
@@ -186,6 +190,17 @@
     }, tickEvery);
   }
 
+  function renderRemaining(draw, visibleResults) {
+    const drawnA = new Set(visibleResults.map(r => r.a));
+    const drawnB = new Set(visibleResults.map(r => r.b));
+    const remA = draw.config.pool_a.filter(t => !drawnA.has(t));
+    const remB = draw.config.pool_b.filter(t => !drawnB.has(t));
+    document.getElementById('leftoverA').innerHTML =
+      remA.map(t => `<span class="leftover-pill a">${t}</span>`).join('');
+    document.getElementById('leftoverB').innerHTML =
+      remB.map(t => `<span class="leftover-pill b">${t}</span>`).join('');
+  }
+
   function render(draw) {
     currentDrawData = draw;
     document.getElementById('drawTitle').textContent = draw.name;
@@ -194,10 +209,10 @@
     const totalA = draw.config.pool_a.length;
 
     subtitle.textContent = draw.status === 'done'
-      ? 'Ziehung abgeschlossen'
+      ? 'Draw complete'
       : draw.status === 'live'
-        ? `${results.length} / ${totalA} gezogen`
-        : (draw.scheduled_at ? 'Ziehung startet in:' : 'Warte auf Ziehung...');
+        ? `${results.length} / ${totalA} drawn`
+        : (draw.scheduled_at ? 'Draw starts in:' : 'Waiting for draw...');
 
     if (draw.status === 'pending' && draw.scheduled_at) {
       startCountdown();
@@ -215,6 +230,8 @@
       </tr>`
     ).join('');
 
+    renderRemaining(draw, visibleResults);
+
     if (results.length > 0) {
       const stage = document.getElementById('stage');
       stage.classList.remove('hidden');
@@ -223,12 +240,15 @@
       const currentB = document.getElementById('currentB');
 
       if (isNewReveal) {
-        spinAndReveal(currentA, last.a, draw.config.pool_a, null, true);
+        const bDuration = 2000;
+        const lockGap = 500 + Math.random() * 500; // MLF locks 0.5-1s before WM
+        spinAndReveal(currentA, last.a, draw.config.pool_a, null, true, bDuration - lockGap);
         spinAndReveal(currentB, last.b, draw.config.pool_b, () => {
           const row = document.createElement('tr');
           row.className = 'new-row';
           row.innerHTML = `<td class="team-a">${last.a}</td><td class="team-b">${last.b}</td>`;
           tbody.appendChild(row);
+          renderRemaining(draw, results);
         });
       } else {
         currentA.textContent = last.a;
@@ -237,15 +257,6 @@
     }
 
     lastCount = results.length;
-
-    const leftoverBox = document.getElementById('leftoverBox');
-    if (draw.status === 'done') {
-      leftoverBox.classList.remove('hidden');
-      document.getElementById('leftoverTeams').innerHTML =
-        remaining.map(t => `<span>${t}</span>`).join('');
-    } else {
-      leftoverBox.classList.add('hidden');
-    }
   }
 </script>
 </body>
