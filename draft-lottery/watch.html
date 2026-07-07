@@ -13,10 +13,8 @@
   .stage { display:flex; align-items:center; justify-content:center; gap:2rem; margin-bottom:2rem; min-height:90px; }
   .slot { width:220px; height:70px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:600; text-align:center; padding:0 12px; border:1px solid #2a2d34; }
   .slot.a { background:#1d2430; color:#85b7eb; }
-  .slot.a.spinning { animation: pulse 0.08s infinite; }
   .slot.b { background:#1d2b26; color:#5dcaa5; }
-  .slot.b.spinning { animation: pulse 0.08s infinite; }
-  @keyframes pulse { 0% { transform:scale(1); } 50% { transform:scale(1.03); } 100% { transform:scale(1); } }
+  @keyframes pulse { 0% { transform:scale(1); filter:brightness(1); } 50% { transform:scale(1.035); filter:brightness(1.25); } 100% { transform:scale(1); filter:brightness(1); } }
   .slot.reveal { animation: pop 0.4s ease; }
   @keyframes pop { 0% { transform:scale(0.9); opacity:0; } 100% { transform:scale(1); opacity:1; } }
   .arrow { font-size:22px; color:#5f6570; }
@@ -144,7 +142,10 @@
     });
   }
 
-  let lastCount = -1;
+  let revealedCount = 0;
+  let animating = false;
+  let latestDraw = null;
+  let initialLoadDone = false;
   let currentDrawData = null;
   let countdownTimer = null;
 
@@ -178,7 +179,12 @@
     const startTime = performance.now();
     const minInterval = 60;
     const maxInterval = 280;
-    el.classList.add('spinning');
+
+    function pulse(intervalMs) {
+      el.style.animation = 'none';
+      void el.offsetWidth;
+      el.style.animation = `pulse ${intervalMs}ms ease`;
+    }
 
     function tick() {
       const elapsed = performance.now() - startTime;
@@ -186,28 +192,29 @@
 
       if (progress >= 1) {
         el.textContent = finalValue;
-        el.classList.remove('spinning');
+        el.style.animation = 'none';
         el.classList.remove('reveal'); void el.offsetWidth; el.classList.add('reveal');
         if (!silent) playLanding();
         if (onDone) onDone();
         return;
       }
 
-      const randomPick = pool[Math.floor(Math.random() * pool.length)];
+      const randomPick = pool.length ? pool[Math.floor(Math.random() * pool.length)] : finalValue;
       el.textContent = randomPick;
       if (!silent) playTick();
 
       const eased = Math.pow(progress, 2); // ease-out: interval grows slowly, then a lot near the end
       const nextInterval = minInterval + (maxInterval - minInterval) * eased;
+      pulse(nextInterval);
       setTimeout(tick, nextInterval);
     }
 
     tick();
   }
 
-  function renderRemaining(draw, visibleResults) {
-    const drawnA = new Set(visibleResults.map(r => clean(r.a)));
-    const drawnB = new Set(visibleResults.map(r => clean(r.b)));
+  function renderRemaining(draw, shownResults) {
+    const drawnA = new Set(shownResults.map(r => clean(r.a)));
+    const drawnB = new Set(shownResults.map(r => clean(r.b)));
     const remA = draw.config.pool_a.map(clean).filter(t => !drawnA.has(t));
     const remB = draw.config.pool_b.map(clean).filter(t => !drawnB.has(t));
     document.getElementById('leftoverA').innerHTML =
@@ -216,18 +223,64 @@
       remB.map(t => `<span class="leftover-pill b">${t}</span>`).join('');
   }
 
+  function renderRow(r, isNew) {
+    const tbody = document.getElementById('resultsBody');
+    const row = document.createElement('tr');
+    if (isNew) row.className = 'new-row';
+    row.innerHTML = `<td class="team-a">${clean(r.a)}</td><td class="team-b">${clean(r.b)}</td>`;
+    tbody.appendChild(row);
+  }
+
+  function updateSubtitle(draw) {
+    const totalA = draw.config.pool_a.length;
+    subtitle.textContent = draw.status === 'done' && revealedCount >= totalA
+      ? 'Draw complete'
+      : (draw.status === 'live' || revealedCount > 0)
+        ? `${revealedCount} / ${totalA} drawn`
+        : (draw.scheduled_at ? 'Draw starts in:' : 'Waiting for draw...');
+  }
+
+  function processQueue() {
+    if (animating || !latestDraw) return;
+    const draw = latestDraw;
+    const results = draw.state.results || [];
+
+    if (revealedCount < results.length) {
+      animating = true;
+      const idx = revealedCount;
+      const entry = results[idx];
+      const alreadyShown = results.slice(0, idx);
+
+      document.getElementById('stage').classList.remove('hidden');
+      const currentA = document.getElementById('currentA');
+      const currentB = document.getElementById('currentB');
+
+      const poolAFiltered = draw.config.pool_a.map(clean).filter(t => !alreadyShown.some(r => clean(r.a) === t));
+      const poolBFiltered = draw.config.pool_b.map(clean).filter(t => !alreadyShown.some(r => clean(r.b) === t));
+
+      const aDuration = 3000 + Math.random() * 1000; // MLF spins 3-4s
+      const lockGap = 2000 + Math.random() * 1000;    // WM locks 2-3s after MLF
+      const bDuration = aDuration + lockGap;
+
+      spinAndReveal(currentA, clean(entry.a), poolAFiltered, null, true, aDuration);
+      spinAndReveal(currentB, clean(entry.b), poolBFiltered, () => {
+        renderRow(entry, true);
+        revealedCount++;
+        renderRemaining(draw, results.slice(0, revealedCount));
+        updateSubtitle(draw);
+        animating = false;
+        processQueue();
+      }, false, bDuration);
+    } else {
+      renderRemaining(draw, results.slice(0, revealedCount));
+    }
+  }
+
   function render(draw) {
     currentDrawData = draw;
+    latestDraw = draw;
     document.getElementById('drawTitle').textContent = draw.name;
     const results = draw.state.results || [];
-    const remaining = draw.state.remaining_b || [];
-    const totalA = draw.config.pool_a.length;
-
-    subtitle.textContent = draw.status === 'done'
-      ? 'Draw complete'
-      : draw.status === 'live'
-        ? `${results.length} / ${totalA} drawn`
-        : (draw.scheduled_at ? 'Draw starts in:' : 'Waiting for draw...');
 
     if (draw.status === 'pending' && draw.scheduled_at) {
       startCountdown();
@@ -235,44 +288,24 @@
       document.getElementById('countdown').classList.add('hidden');
     }
 
-    const tbody = document.getElementById('resultsBody');
-    const isNewReveal = results.length > lastCount;
-    const visibleResults = isNewReveal ? results.slice(0, -1) : results;
-
-    tbody.innerHTML = visibleResults.map((r, i) =>
-      `<tr class="${i === visibleResults.length - 1 && !isNewReveal ? '' : ''}">
-        <td class="team-a">${clean(r.a)}</td><td class="team-b">${clean(r.b)}</td>
-      </tr>`
-    ).join('');
-
-    renderRemaining(draw, visibleResults);
-
-    if (results.length > 0) {
-      const stage = document.getElementById('stage');
-      stage.classList.remove('hidden');
-      const last = results[results.length - 1];
-      const currentA = document.getElementById('currentA');
-      const currentB = document.getElementById('currentB');
-
-      if (isNewReveal) {
-        const aDuration = 3000 + Math.random() * 1000; // MLF spins 3-4s
-        const lockGap = 2000 + Math.random() * 1000;    // WM locks 2-3s after MLF
-        const bDuration = aDuration + lockGap;
-        spinAndReveal(currentA, clean(last.a), draw.config.pool_a.map(clean), null, true, aDuration);
-        spinAndReveal(currentB, clean(last.b), draw.config.pool_b.map(clean), () => {
-          const row = document.createElement('tr');
-          row.className = 'new-row';
-          row.innerHTML = `<td class="team-a">${clean(last.a)}</td><td class="team-b">${clean(last.b)}</td>`;
-          tbody.appendChild(row);
-          renderRemaining(draw, results);
-        }, false, bDuration);
-      } else {
-        currentA.textContent = clean(last.a);
-        currentB.textContent = clean(last.b);
+    if (!initialLoadDone) {
+      initialLoadDone = true;
+      const tbody = document.getElementById('resultsBody');
+      tbody.innerHTML = '';
+      results.forEach(r => renderRow(r, false));
+      revealedCount = results.length;
+      renderRemaining(draw, results);
+      if (results.length > 0) {
+        document.getElementById('stage').classList.remove('hidden');
+        document.getElementById('currentA').textContent = clean(results[results.length - 1].a);
+        document.getElementById('currentB').textContent = clean(results[results.length - 1].b);
       }
+      updateSubtitle(draw);
+      return;
     }
 
-    lastCount = results.length;
+    updateSubtitle(draw);
+    processQueue();
   }
 </script>
 </body>
