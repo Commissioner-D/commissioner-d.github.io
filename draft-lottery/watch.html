@@ -76,6 +76,10 @@
   const SUPABASE_ANON_KEY = 'sb_publishable_iHtHaaxxy_JCJkFpuwgUFQ_ppZH6Xca';
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+  function clean(s) {
+    return typeof s === 'string' ? s.replace(/^"+|"+$/g, '') : s;
+  }
+
   const params = new URLSearchParams(location.search);
   const drawId = params.get('draw');
   const subtitle = document.getElementById('subtitle');
@@ -191,10 +195,10 @@
   }
 
   function renderRemaining(draw, visibleResults) {
-    const drawnA = new Set(visibleResults.map(r => r.a));
-    const drawnB = new Set(visibleResults.map(r => r.b));
-    const remA = draw.config.pool_a.filter(t => !drawnA.has(t));
-    const remB = draw.config.pool_b.filter(t => !drawnB.has(t));
+    const drawnA = new Set(visibleResults.map(r => clean(r.a)));
+    const drawnB = new Set(visibleResults.map(r => clean(r.b)));
+    const remA = draw.config.pool_a.map(clean).filter(t => !drawnA.has(t));
+    const remB = draw.config.pool_b.map(clean).filter(t => !drawnB.has(t));
     document.getElementById('leftoverA').innerHTML =
       remA.map(t => `<span class="leftover-pill a">${t}</span>`).join('');
     document.getElementById('leftoverB').innerHTML =
@@ -226,7 +230,7 @@
 
     tbody.innerHTML = visibleResults.map((r, i) =>
       `<tr class="${i === visibleResults.length - 1 && !isNewReveal ? '' : ''}">
-        <td class="team-a">${r.a}</td><td class="team-b">${r.b}</td>
+        <td class="team-a">${clean(r.a)}</td><td class="team-b">${clean(r.b)}</td>
       </tr>`
     ).join('');
 
@@ -242,17 +246,17 @@
       if (isNewReveal) {
         const bDuration = 2000;
         const lockGap = 500 + Math.random() * 500; // MLF locks 0.5-1s before WM
-        spinAndReveal(currentA, last.a, draw.config.pool_a, null, true, bDuration - lockGap);
-        spinAndReveal(currentB, last.b, draw.config.pool_b, () => {
+        spinAndReveal(currentA, clean(last.a), draw.config.pool_a.map(clean), null, true, bDuration - lockGap);
+        spinAndReveal(currentB, clean(last.b), draw.config.pool_b.map(clean), () => {
           const row = document.createElement('tr');
           row.className = 'new-row';
-          row.innerHTML = `<td class="team-a">${last.a}</td><td class="team-b">${last.b}</td>`;
+          row.innerHTML = `<td class="team-a">${clean(last.a)}</td><td class="team-b">${clean(last.b)}</td>`;
           tbody.appendChild(row);
           renderRemaining(draw, results);
         });
       } else {
-        currentA.textContent = last.a;
-        currentB.textContent = last.b;
+        currentA.textContent = clean(last.a);
+        currentB.textContent = clean(last.b);
       }
     }
 
